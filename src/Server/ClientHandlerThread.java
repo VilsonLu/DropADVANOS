@@ -36,23 +36,18 @@ public class ClientHandlerThread extends Thread {
 
 	public void run() {
 		try {
-			List<File> clientFiles = receiveFiles();
+			List<File> filesToSendBack = receiveFiles();
 
-			// List<File> filesToSendBack = syncFiles(clientFiles);
 			// sendFiles(filesToSendBack);
-			sendFiles(clientFiles);
+			sendFiles(new ArrayList<File>());
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
 		}
 	}
 
-	// public List<File> syncFiles(List<File> clientFiles) {
-
-	// }
-
 	public List<File> receiveFiles() throws IOException {
-		List<File> listOfFiles = new ArrayList<>();
+		List<File> filesToSendBack = new ArrayList<>();
 		dos = new DataOutputStream(socket.getOutputStream());
 		dis = new DataInputStream(socket.getInputStream());
 
@@ -67,23 +62,32 @@ public class ClientHandlerThread extends Thread {
 			String filename = tokens[0];
 			String dateModified = tokens[1];
 			Timestamp t = new Timestamp(Long.valueOf(dateModified));
-			System.out.println("Receiving: " + filename + " " + t);
-			File f = new File("./Server/" + filename);
-			FileOutputStream fos = new FileOutputStream(f);
-			long filesize = dis.readLong();
-			while (filesize > 0
-					&& (n = dis.read(buffer, 0,
-							(int) Math.min(filesize, buffer.length))) != -1) {
-				fos.write(buffer, 0, n);
-				fos.flush();
-				filesize -= n;
 
+			// lock for mutex for critical section
+			FileManager.acquireLockOfFile(filename);
+			// writes if client has a later copy.
+			if (FileManager.clientHasALaterCopy(filename, t)) {
+				System.out.println("Receiving: " + filename + " " + t);
+				File f = new File(FileManager.folderLocation + filename);
+				FileOutputStream fos = new FileOutputStream(f);
+				long filesize = dis.readLong();
+				while (filesize > 0
+						&& (n = dis.read(buffer, 0,
+								(int) Math.min(filesize, buffer.length))) != -1) {
+					fos.write(buffer, 0, n);
+					fos.flush();
+					filesize -= n;
+					fos.close();
+				}
+			} else {
+				// adds it to a file list that will be sent back to the client
+				File f = new File(FileManager.folderLocation + filename);
+				filesToSendBack.add(f);
 			}
-			listOfFiles.add(f);
-			fos.close();
+			FileManager.releaseLockOfFile(filename);
 		}
 
-		return listOfFiles;
+		return filesToSendBack;
 
 	}
 
@@ -103,6 +107,8 @@ public class ClientHandlerThread extends Thread {
 		byte[] buffer = new byte[1024];
 		int n = 0;
 		for (File f : listOfFiles) {
+			// lock for mutex for critical section
+			FileManager.acquireLockOfFile(f.getName());
 			System.out.println("Sending " + f.getName());
 			dos.writeUTF(f.getName());
 			FileInputStream fis = new FileInputStream(f);
@@ -114,6 +120,7 @@ public class ClientHandlerThread extends Thread {
 			}
 			fis.close();
 			dos.flush();
+			FileManager.releaseLockOfFile(f.getName());
 		}
 		// dos.close();
 
