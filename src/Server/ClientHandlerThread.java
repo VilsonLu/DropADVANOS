@@ -38,8 +38,8 @@ public class ClientHandlerThread extends Thread {
 		try {
 			List<File> filesToSendBack = receiveFiles();
 
-			// sendFiles(filesToSendBack);
-			sendFiles(new ArrayList<File>());
+			sendFiles(filesToSendBack);
+			// sendFiles(new ArrayList<File>());
 		} catch (IOException e) {
 			// TODO Auto-generated catch block
 			e.printStackTrace();
@@ -48,6 +48,9 @@ public class ClientHandlerThread extends Thread {
 
 	public List<File> receiveFiles() throws IOException {
 		List<File> filesToSendBack = new ArrayList<>();
+
+		List<String> filenamesFromClient = new ArrayList<>();
+
 		dos = new DataOutputStream(socket.getOutputStream());
 		dis = new DataInputStream(socket.getInputStream());
 
@@ -60,6 +63,7 @@ public class ClientHandlerThread extends Thread {
 			String title = dis.readUTF();
 			String[] tokens = title.split("---");
 			String filename = tokens[0];
+			filenamesFromClient.add(filename);
 			String dateModified = tokens[1];
 			Timestamp t = new Timestamp(Long.valueOf(dateModified));
 
@@ -87,12 +91,29 @@ public class ClientHandlerThread extends Thread {
 			FileManager.releaseLockOfFile(filename);
 		}
 
+		List<File> filesOfServer = findFilesFromServerToGiveBackToClient(filenamesFromClient);
+		filesToSendBack.addAll(filesOfServer);
+
 		return filesToSendBack;
 
 	}
 
-	public void sendFiles(List<File> listOfFiles) throws IOException {
+	private List<File> findFilesFromServerToGiveBackToClient(
+			List<String> filenamesFromClient) {
+		List<File> filesOfServer = new ArrayList<>();
 
+		File folder = new File(FileManager.folderLocation);
+		File[] listOfFiles = folder.listFiles();
+
+		for (File f : listOfFiles) {
+			if (!filenamesFromClient.contains(f.getName()))
+				filesOfServer.add(f);
+		}
+
+		return filesOfServer;
+	}
+
+	public void sendFiles(List<File> listOfFiles) throws IOException {
 		// String folderName = "Server/";
 		// System.out.println("Checking files...");
 		// System.out.println("Directory: " + folderName);
